@@ -341,7 +341,7 @@ async fn confirm_pending(confirmed: bool) -> Result<String, String> {
     let key = openai_key()?;
     let client = reqwest::Client::new();
     let result = execute_tool(&pending.name, &pending.args).unwrap_or_else(|e| json!({"ok":false,"error":e}));
-    let response = send_tool_result(&client, &key, &pending.response_id, &pending.call_id, result).await?;
+    let response = send_tool_results(&client, &key, &pending.response_id, vec![json!({"type":"function_call_output","call_id":pending.call_id,"output":result.to_string()})]).await?;
     if let Some(text) = response_text(&response) {
         *last_response().lock().unwrap() = response.get("id").and_then(Value::as_str).map(str::to_owned);
         Ok(text)
