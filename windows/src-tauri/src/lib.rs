@@ -374,7 +374,6 @@ pub fn run() {
                 let _ = window.set_focus();
             }
         }))
-        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::Windows, None))
         .invoke_handler(tauri::generate_handler![agent_message, confirm_pending, save_openai_api_key, clear_conversation, app_info])
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
@@ -383,6 +382,23 @@ pub fn run() {
                     let screen_width = monitor.size().width as i32;
                     let x = ((screen_width - 460) / 2).max(0);
                     let _ = window.set_position(PhysicalPosition::new(x, 0));
+                }
+            }
+
+            #[cfg(windows)]
+            {
+                if let Ok(exe) = std::env::current_exe() {
+                    let command = format!(r#""{}" --autostart"#, exe.display());
+                    let _ = Command::new("reg.exe")
+                        .args([
+                            "ADD",
+                            r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
+                            "WindowsIAAssistant",
+                            "/REG_SZ",
+                            &command,
+                            "/F",
+                        ])
+                        .status();
                 }
             }
 
