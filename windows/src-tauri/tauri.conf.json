@@ -5,5 +5,5 @@
   "identifier":"it.riccalaste.windows-ia-assistant",
   "build":{"beforeDevCommand":"npm run dev","devUrl":"http://localhost:1420","beforeBuildCommand":"npm run build","frontendDist":"../dist"},
   "app":{"withGlobalTauri":false,"windows":[{"label":"main","title":"Windows IA Assistant","url":"index.html","width":460,"height":112,"resizable":false,"decorations":false,"transparent":true,"alwaysOnTop":true,"skipTaskbar":true,"focus":false,"visible":true,"center":false,"shadow":false}]},
-  "bundle":{"active":true,"targets":["nsis"],"windows":{"nsis":{"installMode":"currentUser"}},"category":"Utility","shortDescription":"Personal cloud-first Windows voice agent","longDescription":"A local wake-word Windows voice assistant with a cloud AI agent and a permissioned local tool bridge."}
+  "bundle":{"active":true,"resources":{"../../voice/wake.ps1":"voice/wake.ps1"},"targets":["nsis"],"windows":{"nsis":{"installMode":"currentUser"}},"category":"Utility","shortDescription":"Personal cloud-first Windows voice agent","longDescription":"A local wake-word Windows voice assistant with a cloud AI agent and a permissioned local tool bridge."}
 }
