@@ -30,33 +30,19 @@ function speak(text: string) {
 }
 
 function createRecognition() {
-  const w = window as unknown as {
-    SpeechRecognition?: typeof SpeechRecognition;
-    webkitSpeechRecognition?: typeof SpeechRecognition;
-  };
+  const w = window as unknown as { SpeechRecognition?: typeof SpeechRecognition; webkitSpeechRecognition?: typeof SpeechRecognition };
   return w.SpeechRecognition ?? w.webkitSpeechRecognition;
 }
 
 function startWakeListener() {
   const SR = createRecognition();
-  if (!SR) {
-    render("Wake word non disponibile in questa build");
-    return;
-  }
-
+  if (!SR) { render("Wake word non disponibile in questa build"); return; }
   recognition = new SR();
   recognition.lang = "it-IT";
   recognition.continuous = true;
   recognition.interimResults = false;
-
   recognition.onresult = (event) => {
-    const transcript = Array.from(event.results)
-      .slice(event.resultIndex)
-      .map(r => r[0]?.transcript ?? "")
-      .join(" ")
-      .trim()
-      .toLowerCase();
-
+    const transcript = Array.from(event.results).slice(event.resultIndex).map(r => r[0]?.transcript ?? "").join(" ").trim().toLowerCase();
     if (!commandMode && WAKE_PHRASES.some(p => transcript.includes(p))) {
       commandMode = true;
       state = "listening";
@@ -65,18 +51,15 @@ function startWakeListener() {
       window.setTimeout(startCommandListener, 500);
     }
   };
-
   recognition.onerror = () => window.setTimeout(startWakeListener, 1200);
   recognition.onend = () => { if (!commandMode) window.setTimeout(startWakeListener, 250); };
-
-  try { recognition.start(); } catch { /* already running */ }
+  try { recognition.start(); } catch {}
 }
 
 function startCommandListener() {
   recognition?.stop();
   const SR = createRecognition();
   if (!SR) return;
-
   const command = new SR();
   command.lang = "it-IT";
   command.continuous = false;
@@ -94,22 +77,10 @@ async function executeCommand(text: string) {
   state = "working";
   render(text);
   try {
-    const lower = text.toLowerCase();
-
-    if (lower.startsWith("apri ")) {
-      await invoke("open_target", { target: text.slice(5).trim() });
-      return finish("Fatto.");
-    }
-
-    if (lower.includes("cerca") && lower.includes("google")) {
-      const query = text.replace(/.*cerca/i, "").replace(/su google/i, "").trim();
-      await invoke("web_search", { query });
-      return finish("Ho aperto la ricerca.");
-    }
-
-    return finish("Richiesta ricevuta. Il motore cloud e i tool generici sono in implementazione.");
+    const reply = await invoke<string>("agent_message", { message: text });
+    finish(reply);
   } catch (error) {
-    return finish(String(error));
+    finish(String(error).replace(/^Error:\s*/, ""));
   }
 }
 
@@ -118,10 +89,7 @@ function finish(message: string) {
   state = "passive";
   render(message);
   speak(message);
-  window.setTimeout(() => {
-    render("In ascolto...");
-    startWakeListener();
-  }, 1400);
+  window.setTimeout(() => { render("In ascolto..."); startWakeListener(); }, 1400);
 }
 
 render("In ascolto...");
