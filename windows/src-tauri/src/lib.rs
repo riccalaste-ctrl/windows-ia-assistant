@@ -56,7 +56,7 @@ fn open_path_or_url(target: &str) -> Result<(), String> {
         return Err("Destinazione vuota.".into());
     }
     if target.starts_with("https://") || target.starts_with("http://") {
-        Command::new("cmd").args(["/C", "start", "", target]).spawn().map_err(|e| e.to_string())?;
+        Command::new("explorer.exe").arg(target).spawn().map_err(|e| e.to_string())?;
         return Ok(());
     }
     let path = PathBuf::from(target);
@@ -186,6 +186,9 @@ fn execute_tool(name: &str, args: &Value) -> Result<Value, String> {
         "rename_file" => {
             let path = PathBuf::from(args.get("path").and_then(Value::as_str).ok_or("path mancante")?);
             let new_name = args.get("new_name").and_then(Value::as_str).ok_or("new_name mancante")?;
+            if new_name.contains(['\\', '/']) || new_name == "." || new_name == ".." {
+                return Err("Nuovo nome non valido.".into());
+            }
             if !is_allowed_path(&path)? { return Err("Percorso non consentito.".into()); }
             let destination = path.parent().ok_or("Cartella padre non disponibile.")?.join(new_name);
             if !is_allowed_path(&destination)? { return Err("Destinazione non consentita.".into()); }
@@ -378,12 +381,10 @@ pub fn run() {
                 let _ = window.set_always_on_top(true);
             }
 
-            let script = app.path().resolve("voice/wake.ps1", BaseDirectory::Resource)
-                .or_else(|_| {
-                    Ok::<std::path::PathBuf, tauri::Error>(
-                        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../voice/wake.ps1")
-                    )
-                })?;
+            let script = match app.path().resolve("voice/wake.ps1", BaseDirectory::Resource) {
+                Ok(path) => path,
+                Err(_) => std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../voice/wake.ps1"),
+            };
 
             if script.exists() {
                 let mut child = Command::new("powershell.exe")
