@@ -1,0 +1,1 @@
+fn main() { windows_ia_assistant_lib::run(); }
