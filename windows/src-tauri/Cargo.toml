@@ -1,0 +1,16 @@
+[package]
+name = "windows-ia-assistant"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "windows_ia_assistant_lib"
+crate-type = ["cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+keyring = "3"
+urlencoding = "2"
