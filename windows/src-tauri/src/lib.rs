@@ -356,6 +356,20 @@ async fn confirm_pending(confirmed: bool) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn has_api_key() -> bool {
+    if let Ok(value) = std::env::var("OPENAI_API_KEY") {
+        if !value.trim().is_empty() {
+            return true;
+        }
+    }
+    keyring::Entry::new("windows-ia-assistant", "openai-api-key")
+        .ok()
+        .and_then(|entry| entry.get_password().ok())
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false)
+}
+
+#[tauri::command]
 fn clear_conversation() {
     *last_response().lock().unwrap() = None;
     *pending_action().lock().unwrap() = None;
@@ -374,7 +388,7 @@ pub fn run() {
                 let _ = window.set_focus();
             }
         }))
-        .invoke_handler(tauri::generate_handler![agent_message, confirm_pending, save_openai_api_key, clear_conversation, app_info])
+        .invoke_handler(tauri::generate_handler![agent_message, confirm_pending, save_openai_api_key, has_api_key, clear_conversation, app_info])
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_always_on_top(true);
