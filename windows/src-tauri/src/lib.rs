@@ -236,11 +236,11 @@ fn response_text(response: &Value) -> Option<String> {
     if parts.is_empty() { None } else { Some(parts.join("\n")) }
 }
 
-async fn send_tool_result(client: &reqwest::Client, key: &str, response_id: &str, call_id: &str, result: Value) -> Result<Value, String> {
+async fn send_tool_results(client: &reqwest::Client, key: &str, response_id: &str, outputs: Vec<Value>) -> Result<Value, String> {
     response_request(client, key, json!({
         "model": model_name(),
         "previous_response_id": response_id,
-        "input": [{"type":"function_call_output","call_id":call_id,"output":result.to_string()}],
+        "input": outputs,
         "tools": tool_definitions(),
         "instructions": "Sei un assistente vocale Windows. Rispondi in italiano salvo richiesta diversa e descrivi solo azioni effettivamente eseguite."
     })).await
@@ -257,7 +257,9 @@ async fn run_agent(message: String) -> Result<String, String> {
       "input": [{"role":"user","content":[{"type":"input_text","text":message}]}],
       "tools": tool_definitions()
     });
-    if let Some(previous_response_id) = previous { body["previous_response_id"] = json!(previous_response_id); }
+    if let Some(previous_response_id) = previous {
+        body["previous_response_id"] = json!(previous_response_id);
+    }
 
     for _ in 0..8 {
         let response = response_request(&client, &key, body).await?;
@@ -266,41 +268,55 @@ async fn run_agent(message: String) -> Result<String, String> {
             return Ok(text);
         }
 
-        let mut calls = Vec::new();
+        let response_id = response.get("id").and_then(Value::as_str).ok_or("Response senza id")?.to_string();
+        let mut outputs = Vec::new();
+
         if let Some(output) = response.get("output").and_then(Value::as_array) {
             for item in output {
-                if item.get("type").and_then(Value::as_str) == Some("function_call") {
-                    let name = item.get("name").and_then(Value::as_str).ok_or("function_call senza nome")?;
-                    let call_id = item.get("call_id").and_then(Value::as_str).ok_or("function_call senza call_id")?;
-                    let args: Value = serde_json::from_str(item.get("arguments").and_then(Value::as_str).unwrap_or("{}")).map_err(|e| e.to_string())?;
-                    calls.push((name.to_string(), call_id.to_string(), args));
+                if item.get("type").and_then(Value::as_str) != Some("function_call") {
+                    continue;
                 }
-            }
-        }
-        if calls.is_empty() { return Ok("Operazione completata.".into()); }
+                let name = item.get("name").and_then(Value::as_str).ok_or("function_call senza nome")?;
+                let call_id = item.get("call_id").and_then(Value::as_str).ok_or("function_call senza call_id")?;
+                let args: Value = serde_json::from_str(
+                    item.get("arguments").and_then(Value::as_str).unwrap_or("{}")
+                ).map_err(|e| e.to_string())?;
 
-        for (name, call_id, args) in calls {
-            let response_id = response.get("id").and_then(Value::as_str).ok_or("Response senza id")?.to_string();
-            if is_mutating(&name) {
-                *pending_action().lock().unwrap() = Some(PendingAction { response_id, call_id, name: name.clone(), args: args.clone() });
-                return Ok(format!("Devo confermare l'azione {} prima di eseguirla.", human_tool_name(&name)));
+                if is_mutating(name) {
+                    *pending_action().lock().unwrap() = Some(PendingAction {
+                        response_id,
+                        call_id: call_id.to_string(),
+                        name: name.to_string(),
+                        args,
+                    });
+                    return Ok(format!("Devo confermare l'azione {} prima di eseguirla.", human_tool_name(name)));
+                }
+
+                let result = execute_tool(name, &args).unwrap_or_else(|e| json!({"ok":false,"error":e}));
+                outputs.push(json!({
+                    "type":"function_call_output",
+                    "call_id":call_id,
+                    "output":result.to_string()
+                }));
             }
-            let result = execute_tool(&name, &args).unwrap_or_else(|e| json!({"ok":false,"error":e}));
-            let next = send_tool_result(&client, &key, &response_id, &call_id, result).await?;
-            if let Some(text) = response_text(&next) {
-                *last_response().lock().unwrap() = next.get("id").and_then(Value::as_str).map(str::to_owned);
-                return Ok(text);
-            }
-            body = json!({
-                "model": model_name(),
-                "previous_response_id": next.get("id").and_then(Value::as_str).ok_or("Response senza id")?,
-                "input": [{"role":"user","content":[{"type":"input_text","text":"Continua l'azione richiesta e restituisci una risposta breve."}]}],
-                "tools": tool_definitions()
-            });
         }
+
+        if outputs.is_empty() {
+            return Ok("Operazione completata.".into());
+        }
+
+        body = json!({
+            "model": model_name(),
+            "previous_response_id": response_id,
+            "input": outputs,
+            "tools": tool_definitions(),
+            "instructions": "Continua come assistente vocale Windows. Rispondi in italiano e descrivi solo risultati verificati."
+        });
     }
+
     Err("Ho raggiunto il limite di passaggi dell'agente.".into())
 }
+
 
 fn human_tool_name(name: &str) -> &'static str {
     match name {
