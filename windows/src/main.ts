@@ -1,8 +1,10 @@
 import "./style.css";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 type State = "passive" | "listening" | "working" | "confirming";
 const root = document.querySelector<HTMLDivElement>("#root")!;
+let wakeActive = false;
 let state: State = "passive";
 let message = "In ascolto…";
 let pendingConfirmation = false;
@@ -77,5 +79,34 @@ input.addEventListener("keydown", (event) => {
   }
 });
 document.body.appendChild(input);
+
+void listen<string>("voice-event", (event) => {
+  const payload = event.payload;
+  if (payload === "WAKE") {
+    wakeActive = true;
+    state = "listening";
+    message = "Sì, dimmi.";
+    render();
+    speak("Sì, dimmi.");
+    return;
+  }
+  if (payload.startsWith("COMMAND|") && wakeActive) {
+    wakeActive = false;
+    const command = payload.slice("COMMAND|".length).trim();
+    if (command) void sendCommand(command);
+    return;
+  }
+  if (payload.startsWith("READY|")) {
+    state = "passive";
+    message = "In ascolto…";
+    render();
+    return;
+  }
+  if (payload.startsWith("ERROR|")) {
+    state = "passive";
+    message = payload.slice("ERROR|".length);
+    render();
+  }
+});
 
 render();
