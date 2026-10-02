@@ -20,7 +20,8 @@ $wakeChoices = New-Object System.Speech.Recognition.Choices
 [void]$wakeChoices.Add("ehi agente")
 [void]$wakeChoices.Add("hey agente")
 [void]$wakeChoices.Add("ehi assistant")
-$wakeGrammar = New-Object System.Speech.Recognition.Grammar((New-Object System.Speech.Recognition.GrammarBuilder($wakeChoices))
+$wakeBuilder = New-Object System.Speech.Recognition.GrammarBuilder($wakeChoices)
+$wakeGrammar = New-Object System.Speech.Recognition.Grammar($wakeBuilder)
 $wakeGrammar.Name = "WakeWord"
 $dictationGrammar = New-Object System.Speech.Recognition.DictationGrammar
 $dictationGrammar.Name = "Command"
