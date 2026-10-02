@@ -5,7 +5,7 @@ use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 
 use serde_json::{json, Value};
-use tauri::{path::BaseDirectory, Emitter, Manager};
+use tauri::{path::BaseDirectory, Emitter, Manager, PhysicalPosition};
 
 static LAST_RESPONSE: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 static PENDING_ACTION: OnceLock<Mutex<Option<PendingAction>>> = OnceLock::new();
@@ -379,6 +379,11 @@ pub fn run() {
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_always_on_top(true);
+                if let Ok(Some(monitor)) = window.current_monitor() {
+                    let screen_width = monitor.size().width as i32;
+                    let x = ((screen_width - 460) / 2).max(0);
+                    let _ = window.set_position(PhysicalPosition::new(x, 0));
+                }
             }
 
             let script = match app.path().resolve("voice/wake.ps1", BaseDirectory::Resource) {
