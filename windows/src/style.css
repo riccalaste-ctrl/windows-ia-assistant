@@ -16,3 +16,5 @@ body{margin:0;background:transparent;overflow:hidden}
 .fallback-input{position:fixed;left:-10000px;width:1px;height:1px;opacity:0}
 @keyframes pulse{50%{transform:scale(1.08);box-shadow:0 0 36px rgba(139,92,246,.42)}}
 @keyframes spin{to{transform:rotate(360deg)}}
+.setup{width:440px;margin:14px auto;padding:18px;border-radius:26px;background:rgba(12,14,22,.96);border:1px solid rgba(255,255,255,.12);box-shadow:0 18px 55px rgba(0,0,0,.42);display:flex;flex-direction:column;gap:9px;backdrop-filter:blur(18px)}
+.setup strong{font-size:15px}.setup small{font-size:12px;line-height:1.45;opacity:.7}.setup input{height:38px;padding:0 12px;border-radius:12px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.07);color:#fff;outline:none}.setup button{height:36px;border:0;border-radius:12px;color:#fff;font-weight:700;cursor:pointer;background:linear-gradient(135deg,#8b5cf6,#22d3ee)}
