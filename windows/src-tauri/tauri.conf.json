@@ -1,0 +1,9 @@
+{
+  "$schema":"https://schema.tauri.app/config/2",
+  "productName":"Windows IA Assistant",
+  "version":"0.1.0",
+  "identifier":"it.riccalaste.windows-ia-assistant",
+  "build":{"beforeDevCommand":"npm run dev","devUrl":"http://localhost:1420","beforeBuildCommand":"npm run build","frontendDist":"../dist"},
+  "app":{"withGlobalTauri":false,"windows":[{"label":"main","title":"Windows IA Assistant","url":"index.html","width":400,"height":100,"resizable":false,"decorations":false,"transparent":true,"alwaysOnTop":true,"skipTaskbar":true,"focus":false,"visible":true}]},
+  "bundle":{"active":true,"targets":["nsis"]}
+}
