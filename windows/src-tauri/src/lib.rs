@@ -1,9 +1,11 @@
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::io::{BufRead, BufReader};
+use std::os::windows::process::CommandExt;
+use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 
 use serde_json::{json, Value};
-use tauri::Manager;
+use tauri::{path::BaseDirectory, Emitter, Manager};
 
 static LAST_RESPONSE: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 static PENDING_ACTION: OnceLock<Mutex<Option<PendingAction>>> = OnceLock::new();
@@ -375,6 +377,37 @@ pub fn run() {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_always_on_top(true);
             }
+
+            let script = app.path().resolve("voice/wake.ps1", BaseDirectory::Resource)
+                .or_else(|_| {
+                    Ok::<std::path::PathBuf, tauri::Error>(
+                        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../voice/wake.ps1")
+                    )
+                })?;
+
+            if script.exists() {
+                let mut child = Command::new("powershell.exe")
+                    .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File"])
+                    .arg(&script)
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::null())
+                    .creation_flags(0x08000000)
+                    .spawn()
+                    .map_err(|e| format!("Impossibile avviare il listener vocale locale: {e}"))?;
+
+                if let Some(stdout) = child.stdout.take() {
+                    let handle = app.handle().clone();
+                    std::thread::spawn(move || {
+                        let reader = BufReader::new(stdout);
+                        for line in reader.lines().map_while(Result::ok) {
+                            let _ = handle.emit("voice-event", line);
+                        }
+                    });
+                }
+            } else {
+                let _ = app.emit("voice-event", "ERROR|Listener vocale locale non trovato.");
+            }
+
             Ok(())
         })
         .run(tauri::generate_context!())
