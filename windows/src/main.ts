@@ -1,1 +1,137 @@
-import "./style.css";\nimport { invoke } from "@tauri-apps/api/core";\nimport { listen } from "@tauri-apps/api/event";\n\ntype State = "passive" | "listening" | "working" | "confirming";\nconst root = document.querySelector<HTMLDivElement>("#root")!;\nlet state: State = "passive";\nlet message = "In ascolto…";\nlet pendingConfirmation = false;\nlet wakeActive = false;\nlet setupVisible = false;\n\nfunction escapeHtml(value: string) {\n  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");\n}\n\nfunction render() {\n  const setup = setupVisible ? '<section class="setup"><strong>Configura l’assistente</strong><small>Inserisci la tua OpenAI API key. Viene salvata nel Credential Manager di Windows.</small><input id="apiKey" type="password" placeholder="sk-..." autocomplete="off"><button id="saveKey">Salva</button></section>' : "";\n  const island = setupVisible ? "" : `<main class="island ${state}"><div class="orb" aria-hidden="true"><span></span><i></i></div><div class="copy"><strong>Agente</strong><small>${escapeHtml(message)}</small></div>${pendingConfirmation ? '<div class="actions"><button id="deny">Annulla</button><button id="allow">Conferma</button></div>' : ""}</main>`;\n  root.innerHTML = setup + island;\n  root.querySelector<HTMLButtonElement>("#allow")?.addEventListener("click", () => void confirmAction(true));\n  root.querySelector<HTMLButtonElement>("#deny")?.addEventListener("click", () => void confirmAction(false));\n  root.querySelector<HTMLButtonElement>("#saveKey")?.addEventListener("click", () => void saveKey());\n}\n\nasync function saveKey() {\n  const input = root.querySelector<HTMLInputElement>("#apiKey");\n  const value = input?.value.trim() ?? "";\n  if (!value) return;\n  try {\n    await invoke("save_openai_api_key", { value });\n    setupVisible = false;\n    state = "passive";\n    message = "Pronto. In ascolto…";\n    render();\n  } catch (error) {\n    message = String(error).replace(/^Error:\s*/, "");\n    render();\n  }\n}\n\nfunction speak(text: string) {\n  if (!("speechSynthesis" in window)) return;\n  window.speechSynthesis.cancel();\n  const utterance = new SpeechSynthesisUtterance(text);\n  utterance.lang = "it-IT";\n  utterance.rate = 1.04;\n  window.speechSynthesis.speak(utterance);\n}\n\nasync function confirmAction(confirmed: boolean) {\n  state = "working";\n  pendingConfirmation = false;\n  message = confirmed ? "Eseguo…" : "Annullato.";\n  render();\n  try {\n    message = await invoke<string>("confirm_pending", { confirmed });\n  } catch (error) {\n    message = String(error).replace(/^Error:\s*/, "");\n  }\n  state = "passive";\n  render();\n  speak(message);\n}\n\nasync function sendCommand(text: string) {\n  state = "working";\n  message = text;\n  render();\n  try {\n    const reply = await invoke<string>("agent_message", { message: text });\n    message = reply;\n    if (reply.startsWith("Devo confermare l\'azione")) {\n      pendingConfirmation = true;\n      state = "confirming";\n    } else {\n      state = "passive";\n      speak(reply);\n    }\n  } catch (error) {\n    state = "passive";\n    message = String(error).replace(/^Error:\s*/, "");\n    speak(message);\n  }\n  render();\n}\n\nconst fallbackInput = document.createElement("input");\nfallbackInput.className = "fallback-input";\nfallbackInput.placeholder = "Comando";\nfallbackInput.autocomplete = "off";\nfallbackInput.addEventListener("keydown", (event) => {\n  if (event.key === "Enter" && fallbackInput.value.trim()) {\n    const text = fallbackInput.value.trim();\n    fallbackInput.value = "";\n    void sendCommand(text);\n  }\n});\ndocument.body.appendChild(fallbackInput);\n\nvoid invoke<boolean>("has_api_key").then((configured) => {\n  if (!configured) {\n    setupVisible = true;\n    render();\n  }\n}).catch(() => {});\n\nvoid listen<string>("voice-event", (event) => {\n  const payload = event.payload;\n  if (payload === "WAKE") {\n    wakeActive = true;\n    state = "listening";\n    message = "Sì, dimmi.";\n    render();\n    speak("Sì, dimmi.");\n    return;\n  }\n  if (payload.startsWith("COMMAND|") && wakeActive) {\n    wakeActive = false;\n    const command = payload.slice("COMMAND|".length).trim();\n    if (command) void sendCommand(command);\n    return;\n  }\n  if (payload.startsWith("READY|")) {\n    state = "passive";\n    message = setupVisible ? "Configura la API key." : "In ascolto…";\n    render();\n    return;\n  }\n  if (payload.startsWith("ERROR|")) {\n    state = "passive";\n    message = payload.slice("ERROR|".length);\n    render();\n  }\n});\n\nrender();\n
+import "./style.css";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+
+type State = "passive" | "listening" | "working" | "confirming";
+const root = document.querySelector<HTMLDivElement>("#root")!;
+let state: State = "passive";
+let message = "In ascolto…";
+let pendingConfirmation = false;
+let wakeActive = false;
+let setupVisible = false;
+
+function escapeHtml(value: string) {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+}
+
+function render() {
+  const setup = setupVisible ? '<section class="setup"><strong>Configura l’assistente</strong><small>Inserisci la tua OpenAI API key. Viene salvata nel Credential Manager di Windows.</small><input id="apiKey" type="password" placeholder="sk-..." autocomplete="off"><button id="saveKey">Salva</button></section>' : "";
+  const island = setupVisible ? "" : `<main class="island ${state}"><div class="orb" aria-hidden="true"><span></span><i></i></div><div class="copy"><strong>Agente</strong><small>${escapeHtml(message)}</small></div>${pendingConfirmation ? '<div class="actions"><button id="deny">Annulla</button><button id="allow">Conferma</button></div>' : ""}</main>`;
+  root.innerHTML = setup + island;
+  root.querySelector<HTMLButtonElement>("#allow")?.addEventListener("click", () => void confirmAction(true));
+  root.querySelector<HTMLButtonElement>("#deny")?.addEventListener("click", () => void confirmAction(false));
+  root.querySelector<HTMLButtonElement>("#saveKey")?.addEventListener("click", () => void saveKey());
+}
+
+async function saveKey() {
+  const input = root.querySelector<HTMLInputElement>("#apiKey");
+  const value = input?.value.trim() ?? "";
+  if (!value) return;
+  try {
+    await invoke("save_openai_api_key", { value });
+    setupVisible = false;
+    state = "passive";
+    message = "Pronto. In ascolto…";
+    render();
+  } catch (error) {
+    message = String(error).replace(/^Error:\s*/, "");
+    render();
+  }
+}
+
+function speak(text: string) {
+  if (!("speechSynthesis" in window)) return;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "it-IT";
+  utterance.rate = 1.04;
+  window.speechSynthesis.speak(utterance);
+}
+
+async function confirmAction(confirmed: boolean) {
+  state = "working";
+  pendingConfirmation = false;
+  message = confirmed ? "Eseguo…" : "Annullato.";
+  render();
+  try {
+    message = await invoke<string>("confirm_pending", { confirmed });
+  } catch (error) {
+    message = String(error).replace(/^Error:\s*/, "");
+  }
+  state = "passive";
+  render();
+  speak(message);
+}
+
+async function sendCommand(text: string) {
+  state = "working";
+  message = text;
+  render();
+  try {
+    const reply = await invoke<string>("agent_message", { message: text });
+    message = reply;
+    if (reply.startsWith("Devo confermare l\'azione")) {
+      pendingConfirmation = true;
+      state = "confirming";
+    } else {
+      state = "passive";
+      speak(reply);
+    }
+  } catch (error) {
+    state = "passive";
+    message = String(error).replace(/^Error:\s*/, "");
+    speak(message);
+  }
+  render();
+}
+
+const fallbackInput = document.createElement("input");
+fallbackInput.className = "fallback-input";
+fallbackInput.placeholder = "Comando";
+fallbackInput.autocomplete = "off";
+fallbackInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && fallbackInput.value.trim()) {
+    const text = fallbackInput.value.trim();
+    fallbackInput.value = "";
+    void sendCommand(text);
+  }
+});
+document.body.appendChild(fallbackInput);
+
+void invoke<boolean>("has_api_key").then((configured) => {
+  if (!configured) {
+    setupVisible = true;
+    render();
+  }
+}).catch(() => {});
+
+void listen<string>("voice-event", (event) => {
+  const payload = event.payload;
+  if (payload === "WAKE") {
+    wakeActive = true;
+    state = "listening";
+    message = "Sì, dimmi.";
+    render();
+    speak("Sì, dimmi.");
+    return;
+  }
+  if (payload.startsWith("COMMAND|") && wakeActive) {
+    wakeActive = false;
+    const command = payload.slice("COMMAND|".length).trim();
+    if (command) void sendCommand(command);
+    return;
+  }
+  if (payload.startsWith("READY|")) {
+    state = "passive";
+    message = setupVisible ? "Configura la API key." : "In ascolto…";
+    render();
+    return;
+  }
+  if (payload.startsWith("ERROR|")) {
+    state = "passive";
+    message = payload.slice("ERROR|".length);
+    render();
+  }
+});
+
+render();
