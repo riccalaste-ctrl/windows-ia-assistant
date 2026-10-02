@@ -1,24 +1,37 @@
 import "./style.css";
 import { invoke } from "@tauri-apps/api/core";
 
-type State = "passive" | "listening" | "working";
+type State = "passive" | "listening" | "working" | "confirming";
 const root = document.querySelector<HTMLDivElement>("#root")!;
 let state: State = "passive";
-let recognition: SpeechRecognition | null = null;
-let commandMode = false;
-
-const WAKE_PHRASES = ["ehi agente", "hey agente", "ehi assistant"];
-
-function render(message: string) {
-  root.innerHTML =
-    '<main class="island ' + state + '">' +
-    '<div class="orb"><span></span></div>' +
-    '<div class="text"><strong>Agente</strong><small>' + escapeHtml(message) + '</small></div>' +
-    '</main>';
-}
+let message = "In ascolto…";
+let pendingConfirmation = false;
 
 function escapeHtml(value: string) {
-  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  return value.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
+}
+
+function render() {
+  root.innerHTML = \`
+    <main class="island \${state}">
+      <div class="orb" aria-hidden="true"><span></span><i></i></div>
+      <div class="copy"><strong>Agente</strong><small>\${escapeHtml(message)}</small></div>
+      \${pendingConfirmation ? '<div class="actions"><button id="deny">Annulla</button><button id="allow">Conferma</button></div>' : ''}
+    </main>\`;
+  root.querySelector<HTMLButtonElement>("#allow")?.addEventListener("click", () => void confirm(true));
+  root.querySelector<HTMLButtonElement>("#deny")?.addEventListener("click", () => void confirm(false));
+}
+
+async function confirm(ok: boolean) {
+  state = "working";
+  pendingConfirmation = false;
+  message = ok ? "Eseguo…" : "Annullato.";
+  render();
+  try { message = await invoke<string>("confirm_pending", { confirmed: ok }); }
+  catch (error) { message = String(error).replace(/^Error:\s*/, ""); }
+  state = "passive";
+  render();
+  speak(message);
 }
 
 function speak(text: string) {
@@ -26,71 +39,43 @@ function speak(text: string) {
   speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   u.lang = "it-IT";
+  u.rate = 1.04;
   speechSynthesis.speak(u);
 }
 
-function createRecognition() {
-  const w = window as unknown as { SpeechRecognition?: typeof SpeechRecognition; webkitSpeechRecognition?: typeof SpeechRecognition };
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition;
-}
-
-function startWakeListener() {
-  const SR = createRecognition();
-  if (!SR) { render("Wake word non disponibile in questa build"); return; }
-  recognition = new SR();
-  recognition.lang = "it-IT";
-  recognition.continuous = true;
-  recognition.interimResults = false;
-  recognition.onresult = (event) => {
-    const transcript = Array.from(event.results).slice(event.resultIndex).map(r => r[0]?.transcript ?? "").join(" ").trim().toLowerCase();
-    if (!commandMode && WAKE_PHRASES.some(p => transcript.includes(p))) {
-      commandMode = true;
-      state = "listening";
-      render("Dimmi.");
-      speak("Sì, dimmi.");
-      window.setTimeout(startCommandListener, 500);
-    }
-  };
-  recognition.onerror = () => window.setTimeout(startWakeListener, 1200);
-  recognition.onend = () => { if (!commandMode) window.setTimeout(startWakeListener, 250); };
-  try { recognition.start(); } catch {}
-}
-
-function startCommandListener() {
-  recognition?.stop();
-  const SR = createRecognition();
-  if (!SR) return;
-  const command = new SR();
-  command.lang = "it-IT";
-  command.continuous = false;
-  command.interimResults = false;
-  command.onresult = async (event) => {
-    const text = event.results[0]?.[0]?.transcript?.trim() ?? "";
-    if (!text) return finish("Non ho capito.");
-    await executeCommand(text);
-  };
-  command.onerror = () => finish("Non ho capito.");
-  try { command.start(); } catch { finish("Non ho capito."); }
-}
-
-async function executeCommand(text: string) {
+async function sendCommand(text: string) {
   state = "working";
-  render(text);
+  message = text;
+  render();
   try {
     const reply = await invoke<string>("agent_message", { message: text });
-    finish(reply);
+    message = reply;
+    if (reply.startsWith("Devo confermare l'azione")) {
+      pendingConfirmation = true;
+      state = "confirming";
+    } else {
+      state = "passive";
+      speak(reply);
+    }
   } catch (error) {
-    finish(String(error).replace(/^Error:\s*/, ""));
+    state = "passive";
+    message = String(error).replace(/^Error:\s*/, "");
+    speak(message);
   }
+  render();
 }
 
-function finish(message: string) {
-  commandMode = false;
-  state = "passive";
-  render(message);
-  speak(message);
-  window.setTimeout(() => { render("In ascolto..."); startWakeListener(); }, 1400);
-}
+const input = document.createElement("input");
+input.className = "fallback-input";
+input.placeholder = "Comando";
+input.autocomplete = "off";
+input.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && input.value.trim()) {
+    const text = input.value.trim();
+    input.value = "";
+    void sendCommand(text);
+  }
+});
+document.body.appendChild(input);
 
-render("In ascolto...");
-startWakeListener();
+render();
