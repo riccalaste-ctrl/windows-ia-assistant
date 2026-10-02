@@ -15,15 +15,15 @@ if ($null -eq $info) {
   $info = $recognizers | Select-Object -First 1
 }
 
-$engine = New-Object System.Speech.Recognition.SpeechRecognitionEngine($info.Id)
-$wakeChoices = New-Object System.Speech.Recognition.Choices
+$engine = [System.Speech.Recognition.SpeechRecognitionEngine]::new($info.Id)
+$wakeChoices = [System.Speech.Recognition.Choices]::new()
 [void]$wakeChoices.Add("ehi agente")
 [void]$wakeChoices.Add("hey agente")
 [void]$wakeChoices.Add("ehi assistant")
-$wakeBuilder = New-Object System.Speech.Recognition.GrammarBuilder($wakeChoices)
-$wakeGrammar = New-Object System.Speech.Recognition.Grammar($wakeBuilder)
+$wakeBuilder = [System.Speech.Recognition.GrammarBuilder]::new($wakeChoices)
+$wakeGrammar = [System.Speech.Recognition.Grammar]::new($wakeBuilder)
 $wakeGrammar.Name = "WakeWord"
-$dictationGrammar = New-Object System.Speech.Recognition.DictationGrammar
+$dictationGrammar = [System.Speech.Recognition.DictationGrammar]::new()
 $dictationGrammar.Name = "Command"
 $dictationGrammar.Enabled = $false
 
