@@ -88,6 +88,7 @@ fn model_name() -> String {
     std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-6-luna".to_string())
 }
 
+#[tauri::command]
 fn save_openai_api_key(value: String) -> Result<(), String> {
     if value.trim().is_empty() { return Err("API key vuota.".into()); }
     keyring::Entry::new("windows-ia-assistant", "openai-api-key")
@@ -232,7 +233,7 @@ fn response_text(response: &Value) -> Option<String> {
     let mut parts = Vec::new();
     for item in response.get("output")?.as_array()? {
         if item.get("type").and_then(Value::as_str) != Some("message") { continue; }
-        if let Some(content) = item.get("content").and_then(Value::as_array()) {
+        if let Some(content) = item.get("content").and_then(|value| value.as_array()) {
             for part in content {
                 if let Some(text) = part.get("text").and_then(Value::as_str) { parts.push(text.to_string()); }
             }
