@@ -37,6 +37,19 @@ jobs:
       - name: Build Windows installer
         run: npm run tauri build
 
+      - name: Scan packaged binaries with Microsoft Defender
+        shell: pwsh
+        run: |
+          $mp = Join-Path $env:ProgramFiles "Windows Defender\\MpCmdRun.exe"
+          if (-not (Test-Path $mp)) { Write-Warning "MpCmdRun.exe not found; skipping Defender scan."; exit 0 }
+          $targets = Get-ChildItem "src-tauri/target/release" -Recurse -File -Include *.exe
+          if (-not $targets) { throw "No Windows executable was produced." }
+          foreach ($target in $targets) {
+            Write-Host "Defender scan: $($target.FullName)"
+            & $mp -Scan -ScanType 3 -File $target.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Microsoft Defender reported a problem for $($target.Name) (exit code $LASTEXITCODE)." }
+          }
+
       - name: Generate checksums
         shell: pwsh
         run: |
