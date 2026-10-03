@@ -403,17 +403,15 @@ pub fn run() {
             #[cfg(windows)]
             {
                 if let Ok(exe) = std::env::current_exe() {
-                    let command = format!(r#""{}" --autostart"#, exe.display());
-                    let _ = Command::new("reg.exe")
-                        .args([
-                            "ADD",
-                            r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
-                            "WindowsIAAssistant",
-                            "/REG_SZ",
-                            &command,
-                            "/F",
-                        ])
-                        .status();
+                    let startup_dir = dirs::data_dir()
+                        .map(|p| p.join("Microsoft\\Windows\\Start Menu\\Programs\\Startup"));
+                    if let Some(startup_dir) = startup_dir {
+                        if std::fs::create_dir_all(&startup_dir).is_ok() {
+                            let shortcut = startup_dir.join("Windows IA Assistant.cmd");
+                            let command = format!(r#"start "" "{}" --autostart"#, exe.display());
+                            let _ = std::fs::write(shortcut, format!("@echo off\r\n{}\r\n", command));
+                        }
+                    }
                 }
             }
 
@@ -424,7 +422,7 @@ pub fn run() {
 
             if script.exists() {
                 let mut child = Command::new("powershell.exe")
-                    .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File"])
+                    .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-File"])
                     .arg(&script)
                     .stdout(Stdio::piped())
                     .stderr(Stdio::null())
